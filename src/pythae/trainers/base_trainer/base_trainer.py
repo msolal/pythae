@@ -10,13 +10,13 @@ import torch.distributed as dist
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from ...customexception import ModelError
 from ...data.datasets import BaseDataset, collate_dataset_output
 from ...models import BaseAE
-from ..trainer_utils import set_seed
+from ..trainer_utils import set_seed, update_dict
 from ..training_callbacks import (
     CallbackHandler,
     MetricConsolePrinterCallback,
@@ -554,6 +554,7 @@ class BaseTrainer:
         self.model.eval()
 
         epoch_loss = 0
+        epoch_metrics = {}
 
         with self.amp_context:
             for inputs in self.eval_loader:
@@ -579,6 +580,7 @@ class BaseTrainer:
                 loss = model_output.loss
 
                 epoch_loss += loss.item()
+                update_dict(epoch_metrics, model_output.metrics)
 
                 if epoch_loss != epoch_loss:
                     raise ArithmeticError("NaN detected in eval loss")
@@ -587,9 +589,13 @@ class BaseTrainer:
                     training_config=self.training_config
                 )
 
+        epoch_metrics = {
+            k: epoch_metrics[k] / len(self.eval_loader) for k in epoch_metrics
+        }
+
         epoch_loss /= len(self.eval_loader)
 
-        return epoch_loss
+        return epoch_loss, epoch_metrics
 
     def train_step(self, epoch: int):
         """The trainer performs training loop over the train_loader.
@@ -611,6 +617,7 @@ class BaseTrainer:
         self.model.train()
 
         epoch_loss = 0
+        epoch_model_metrics = {}
 
         for inputs in self.train_loader:
             inputs = self._set_inputs_to_device(inputs)
@@ -628,6 +635,7 @@ class BaseTrainer:
             loss = model_output.loss
 
             epoch_loss += loss.item()
+            update_dict(epoch_model_metrics, model_output.metrics)
 
             if epoch_loss != epoch_loss:
                 raise ArithmeticError("NaN detected in train loss")
@@ -642,9 +650,14 @@ class BaseTrainer:
         else:
             self.model.update()
 
+        epoch_model_metrics = {
+            k: epoch_model_metrics[k] / len(self.train_loader)
+            for k in epoch_model_metrics
+        }
+
         epoch_loss /= len(self.train_loader)
 
-        return epoch_loss
+        return epoch_loss, epoch_model_metrics
 
     def save_model(self, model: BaseAE, dir_path: str):
         """This method saves the final model along with the config files

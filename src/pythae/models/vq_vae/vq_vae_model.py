@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 import torch
@@ -108,13 +107,20 @@ class VQVAE(AE):
 
         loss, recon_loss, vq_loss = self.loss_function(recon_x, x, quantizer_output)
 
+        metrics = {
+            "loss": loss.item(),
+            "recon_loss": recon_loss.item(),
+            "vq_loss": vq_loss.item(),
+        }
+
         output = ModelOutput(
             recon_loss=recon_loss,
             vq_loss=vq_loss,
             loss=loss,
-            recon_x=recon_x,
+            reconstruction=recon_x,
             z=quantized_embed,
             quantized_indices=quantized_indices,
+            metrics=metrics,
         )
 
         return output
