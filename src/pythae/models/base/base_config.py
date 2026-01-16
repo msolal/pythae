@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 from pydantic.dataclasses import dataclass
 
@@ -15,6 +15,7 @@ class BaseAEConfig(BaseConfig):
         latent_dim (int): The latent space dimension. Default: None.
     """
 
+    main_modality: Optional[str] = None
     input_dim: Union[Tuple[int, ...], None] = None
     latent_dim: int = 10
     uses_default_encoder: bool = True

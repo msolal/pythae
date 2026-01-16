@@ -2,11 +2,14 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
+from multivae.models.base.base_model import ModelOutput
+from multivae.models.nn.base_architectures import (
+    BaseConditionalDecoder,
+    BaseJointEncoder,
+)
 
 from ...data.datasets import BaseDataset
 from ..ae import AE
-from ..base.base_utils import ModelOutput
-from ..nn import BaseDecoder, BaseEncoder
 from .vq_vae_config import VQVAEConfig
 from .vq_vae_utils import Quantizer, QuantizerEMA
 
@@ -24,7 +27,7 @@ class VQVAE(AE):
             architectures if desired. If None is provided, a simple Multi Layer Preception
             (https://en.wikipedia.org/wiki/Multilayer_perceptron) is used. Default: None.
 
-        decoder (BaseDecoder): An instance of BaseDecoder (inheriting from `torch.nn.Module` which
+        decoder (BaseConditionalDecoder): An instance of BaseConditionalDecoder (inheriting from `torch.nn.Module` which
             plays the role of encoder. This argument allows you to use your own neural networks
             architectures if desired. If None is provided, a simple Multi Layer Preception
             (https://en.wikipedia.org/wiki/Multilayer_perceptron) is used. Default: None.
@@ -37,8 +40,8 @@ class VQVAE(AE):
     def __init__(
         self,
         model_config: VQVAEConfig,
-        encoder: Optional[BaseEncoder] = None,
-        decoder: Optional[BaseDecoder] = None,
+        encoder: Optional[BaseJointEncoder] = None,
+        decoder: Optional[BaseConditionalDecoder] = None,
     ):
         AE.__init__(self, model_config=model_config, encoder=encoder, decoder=decoder)
 
@@ -80,12 +83,14 @@ class VQVAE(AE):
 
         """
 
-        x = inputs["data"]
+        data = inputs["data"]
+        x = data[self.model_config.main_modality]
         uses_ddp = kwargs.pop("uses_ddp", False)
 
         encoder_output = self.encoder(x)
 
         embeddings = encoder_output.embedding
+        # NB can be changed into encoder_output['embedding'] if necessary
 
         reshape_for_decoding = False
 
@@ -103,7 +108,7 @@ class VQVAE(AE):
         if reshape_for_decoding:
             quantized_embed = quantized_embed.reshape(embeddings.shape[0], -1)
 
-        recon_x = self.decoder(quantized_embed).reconstruction
+        recon_x = self.decoder(quantized_embed, cond_mods=None).reconstruction
 
         loss, recon_loss, vq_loss = self.loss_function(recon_x, x, quantizer_output)
 
@@ -143,3 +148,20 @@ class VQVAE(AE):
         # Sample N(0, I)
         eps = torch.randn_like(std)
         return mu + eps * std, eps
+
+    def predict(self, inputs, **kwargs):
+        """Computes the latent code and the reconstruction for all the data in input"""
+
+        self.eval()
+
+        data_shape = inputs.data[self.model_config.main_modality].shape
+
+        with torch.set_grad_enabled(True):
+            forward_output = self.forward(inputs)
+
+        output = ModelOutput(embedding=forward_output["z"])
+        output[self.model_config.main_modality] = forward_output.reconstruction.reshape(
+            data_shape
+        )
+
+        return output

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic.dataclasses import dataclass
 
 from ..ae import AEConfig
@@ -17,6 +19,7 @@ class VQVAEConfig(AEConfig):
         use_ema (bool): Whether to use the Exponential Movng Average Update (EMA). Default: False.
         decay (float): The decay to apply in the EMA update. Must be in [0, 1]. Default: 0.99.
     """
+    main_modality: Optional[str] = None
     commitment_loss_factor: float = 0.25
     quantization_loss_factor: float = 1.0
     num_embeddings: int = 512
