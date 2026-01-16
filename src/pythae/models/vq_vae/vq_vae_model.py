@@ -90,7 +90,6 @@ class VQVAE(AE):
         encoder_output = self.encoder(x)
 
         embeddings = encoder_output.embedding
-        # NB can be changed into encoder_output['embedding'] if necessary
 
         reshape_for_decoding = False
 
