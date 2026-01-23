@@ -1,5 +1,4 @@
-from typing import Optional
-
+from typing import Optional, Literal
 from pydantic.dataclasses import dataclass
 
 from ..ae import AEConfig
@@ -25,6 +24,7 @@ class VQVAEConfig(AEConfig):
     num_embeddings: int = 512
     use_ema: bool = False
     decay: float = 0.99
+    data_type: Literal["2d","3d"] = "2d"
 
     def __post_init__(self):
         super().__post_init__()

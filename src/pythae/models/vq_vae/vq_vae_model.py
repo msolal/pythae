@@ -49,6 +49,24 @@ class VQVAE(AE):
 
         self.model_name = "VQVAE"
 
+    def _reshape_for_quantizer(self,z, model_config):
+        """Returns a latent code where the last dimension is the embedding dimension"""
+        reshape_for_decoding = False
+        
+        if model_config.data_type=="3d":
+            if len(z.shape) == 2:
+                z = z.reshape(z.shape[0], 1, 1, 1, -1) # (batch, channel, 1d, 2d,3d)
+                reshape_for_decoding = True
+            z = z.permute(0, 2, 3, 4, 1) # (batch, 1d, 2d, 3d, channel)
+
+        else:
+            if len(z.shape) == 2:
+                reshape_for_decoding=True
+                z = z.reshape(z.shape[0], 1, 1, -1) # (batch, channel, 1d, 2d)
+
+            z = z.permute(0, 2, 3, 1) # (batch, 1d, 2d, channel)
+        return z, reshape_for_decoding
+
     def _set_quantizer(self, model_config):
         if model_config.input_dim is None:
             raise AttributeError(
@@ -59,12 +77,10 @@ class VQVAE(AE):
 
         x = torch.randn((2,) + self.model_config.input_dim)
         z = self.encoder(x).embedding
-        if len(z.shape) == 2:
-            z = z.reshape(z.shape[0], 1, 1, -1)
 
-        z = z.permute(0, 2, 3, 1)
-
-        self.model_config.embedding_dim = z.shape[-1]
+        z,_ = self._reshape_for_quantizer(z, model_config)
+        
+        self.model_config.embedding_dim = z.shape[-1] # the embedding dimension is the channel dimension
         if model_config.use_ema:
             self.quantizer = QuantizerEMA(model_config=model_config)
 
@@ -82,6 +98,7 @@ class VQVAE(AE):
             ModelOutput: An instance of ModelOutput containing all the relevant parameters
 
         """
+        
 
         data = inputs["data"]
         x = data[self.model_config.main_modality]
@@ -91,13 +108,7 @@ class VQVAE(AE):
 
         embeddings = encoder_output.embedding
 
-        reshape_for_decoding = False
-
-        if len(embeddings.shape) == 2:
-            embeddings = embeddings.reshape(embeddings.shape[0], 1, 1, -1)
-            reshape_for_decoding = True
-
-        embeddings = embeddings.permute(0, 2, 3, 1)
+        embeddings,reshape_for_decoding = self._reshape_for_quantizer(embeddings, self.model_config)
 
         quantizer_output = self.quantizer(embeddings, uses_ddp=uses_ddp)
 
@@ -154,9 +165,8 @@ class VQVAE(AE):
         self.eval()
 
         data_shape = inputs.data[self.model_config.main_modality].shape
-
-        with torch.set_grad_enabled(True):
-            forward_output = self.forward(inputs)
+ 
+        forward_output = self.forward(inputs)
 
         output = ModelOutput(embedding=forward_output["z"])
         output[self.model_config.main_modality] = forward_output.reconstruction.reshape(

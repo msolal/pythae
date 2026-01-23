@@ -27,6 +27,11 @@ class Quantizer(nn.Module):
         )
 
     def forward(self, z: torch.Tensor, uses_ddp: bool = False):
+
+        """
+        z shape is either (batch, 1d, 2d, embedding_dim) or (batch, 1d, 2d, 3d, embedding_dim)
+        """
+
         distances = (
             (z.reshape(-1, self.embedding_dim) ** 2).sum(dim=-1, keepdim=True)
             + (self.embeddings.weight**2).sum(dim=-1)
@@ -35,7 +40,7 @@ class Quantizer(nn.Module):
 
         closest = distances.argmin(-1).unsqueeze(-1)
 
-        quantized_indices = closest.reshape(z.shape[0], z.shape[1], z.shape[2])
+        quantized_indices = closest.reshape(*z.shape[:-1])
 
         one_hot_encoding = (
             F.one_hot(closest, num_classes=self.num_embeddings)
@@ -65,14 +70,17 @@ class Quantizer(nn.Module):
             commitment_loss * self.commitment_loss_factor
             + embedding_loss * self.quantization_loss_factor
         )
-        quantized = quantized.permute(0, 3, 1, 2)
+        if len(z.shape) == 4: #2d data
+            quantized = quantized.permute(0, 3, 1, 2)
+        elif len(z.shape) == 5: # 3d data
+            quantized = quantized.permute(0, 4, 1, 2, 3)
 
         output = ModelOutput(
             quantized_vector=quantized,
             quantized_indices=quantized_indices.unsqueeze(1),
             loss=loss,
         )
-
+        print(self.embedding_dim,quantized.shape)
         return output
 
 
@@ -108,7 +116,7 @@ class QuantizerEMA(nn.Module):
 
         closest = distances.argmin(-1).unsqueeze(-1)
 
-        quantized_indices = closest.reshape(z.shape[0], z.shape[1], z.shape[2])
+        quantized_indices = closest.reshape(*z.shape[:-1])
 
         one_hot_encoding = (
             F.one_hot(closest, num_classes=self.num_embeddings)
@@ -153,7 +161,11 @@ class QuantizerEMA(nn.Module):
         quantized = z + (quantized - z).detach()
 
         loss = commitment_loss * self.commitment_loss_factor
-        quantized = quantized.permute(0, 3, 1, 2)
+        
+        if len(z.shape) == 4: #2d data
+            quantized = quantized.permute(0, 3, 1, 2)
+        elif len(z.shape) == 5: # 3d data
+            quantized = quantized.permute(0, 4, 1, 2, 3)
 
         output = ModelOutput(
             quantized_vector=quantized,
