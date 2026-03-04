@@ -32,3 +32,6 @@ class VQVAEConfig(AEConfig):
             assert 0 <= self.decay <= 1, (
                 "The decay in the EMA update must be in [0, 1]. " f"Got {self.decay}."
             )
+
+        if isinstance(self.input_dim, list):
+            self.input_dim = tuple(self.input_dim)

@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 from pydantic.dataclasses import dataclass
 
@@ -16,7 +16,7 @@ class BaseAEConfig(BaseConfig):
     """
 
     main_modality: Optional[str] = None
-    input_dim: Union[Tuple[int, ...], None] = None
+    input_dim: Union[Tuple[int, ...], None, list] = None
     latent_dim: int = 10
     uses_default_encoder: bool = True
     uses_default_decoder: bool = True
